@@ -73,6 +73,7 @@ class Aladin(anywidget.AnyWidget):
     # overlay survey
     overlay_survey = Unicode("").tag(sync=True, init_option=True)
     overlay_survey_opacity = Float(0.0).tag(sync=True, init_option=True)
+    surveys = List(trait=Any()).tag(sync=True)
 
     # tables/catalogs
     _table = Bytes(Undefined).tag(sync=True)

@@ -13,6 +13,19 @@ function convert_pyname_to_jsname(pyname) {
 
 async function initialize({ model }) {
   await A.init;
+  let surveys = [];
+  try {
+    const res = await fetch(
+      "https://alasky.cds.unistra.fr/MocServer/query?get=record&fields=ID&dataproduct_type=image&fmt=json",
+    );
+    const json = await res.json();
+    surveys = json.map((survey) => survey.ID);
+  } catch (e) {
+    console.error(`Error: ${e}`);
+    surveys = [];
+  }
+  model.set("surveys", surveys);
+  model.save_changes();
 }
 
 function render({ model, el }) {
