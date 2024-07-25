@@ -15,6 +15,7 @@ import warnings
 
 import anywidget
 from astropy.coordinates import SkyCoord, Angle
+from astropy.coordinates.name_resolve import NameResolveError
 from astropy.table.table import QTable
 from astropy.table import Table
 from astropy.io import fits as astropy_fits
@@ -191,6 +192,10 @@ class Aladin(anywidget.AnyWidget):
     )
 
     # Values
+    _ready = Bool(
+        False,
+        help="A private trait that stores the readiness of the widget.",
+    ).tag(sync=True)
     _wcs = traitlets.Dict().tag(sync=True)
     _fov_xy = traitlets.Dict().tag(sync=True)
 
@@ -378,7 +383,15 @@ class Aladin(anywidget.AnyWidget):
     @target.setter
     def target(self, target: Union[str, SkyCoord]) -> None:
         if isinstance(target, str):  # If the target is str, parse it
-            target = parse_coordinate_string(target, self._survey_body)
+            try:
+                target = parse_coordinate_string(target, self._survey_body)
+            except NameResolveError as e:
+                if not self._ready:
+                    raise WidgetCommunicationError(
+                        f"Either '{target}' is not a valid object name, or "
+                        f"the survey body type is not yet defined so you "
+                        f"need to set the target from another cell."
+                    ) from e
         elif not isinstance(target, SkyCoord):  # If the target is not str or SkyCoord
             raise ValueError(
                 "target must be a string or an astropy.coordinates.SkyCoord object"
