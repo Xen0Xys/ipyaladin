@@ -14,7 +14,7 @@ from typing import ClassVar, Dict, Final, List, Optional, Tuple, Union
 import warnings
 
 import anywidget
-from astropy.coordinates import SkyCoord, Angle
+from astropy.coordinates import SkyCoord, Angle, BaseBodycentricRepresentation
 from astropy.coordinates.name_resolve import NameResolveError
 from astropy.table.table import QTable
 from astropy.table import Table
@@ -361,7 +361,7 @@ class Aladin(anywidget.AnyWidget):
         self._wcs = {}
 
     @property
-    def target(self) -> SkyCoord:
+    def target(self) -> Union[SkyCoord, BaseBodycentricRepresentation]:
         """The target of the Aladin Lite widget.
 
         It can be set with either a string or an `astropy.coordinates.SkyCoord` object.
@@ -372,13 +372,15 @@ class Aladin(anywidget.AnyWidget):
             An `astropy.coordinates.SkyCoord` object representing the target.
 
         """
-        ra, dec = self._target.split(" ")
-        return SkyCoord(
-            ra=ra,
-            dec=dec,
-            frame="icrs",
-            unit="deg",
-        )
+        lon, lat = self._target.split(" ")
+        if self._survey_body == "sky":
+            return SkyCoord(
+                ra=lon,
+                dec=lat,
+                frame="icrs",
+                unit="deg",
+            )
+        return BaseBodycentricRepresentation(lon, lat)
 
     @target.setter
     def target(self, target: Union[str, SkyCoord]) -> None:
