@@ -23,7 +23,11 @@ from astropy.wcs import WCS
 import numpy as np
 import traitlets
 
-from .utils.exceptions import WidgetCommunicationError, WidgetReducedError
+from .utils.exceptions import (
+    WidgetCommunicationError,
+    WidgetReducedError,
+    WidgetNotReadyError,
+)
 from .utils._coordinate_parser import parse_coordinate_string
 
 try:
@@ -72,6 +76,48 @@ SupportedRegion = Union[
 ]
 
 
+def is_ready(func: Callable) -> Callable:
+    """Check if the widget is ready to execute a function.
+
+    Parameters
+    ----------
+    func : Callable
+        The function to decorate.
+
+    Returns
+    -------
+    Callable
+        The decorated function.
+
+    """
+
+    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+        """Check if the widget is ready to execute a function.
+
+        Parameters
+        ----------
+        self : any
+            The widget object.
+        *args : any
+            The arguments of the function.
+        **kwargs : any
+            The keyword arguments of the function.
+
+        Returns
+        -------
+        any
+            The result of the function if the widget is ready.
+
+        """
+        if not getattr(self, "_ready", False):
+            raise WidgetNotReadyError(
+                "The object is not ready to execute this function."
+            )
+        return func(self, *args, **kwargs)
+
+    return wrapper
+
+
 class Aladin(anywidget.AnyWidget):
     """Aladin Lite widget.
 
@@ -109,7 +155,7 @@ class Aladin(anywidget.AnyWidget):
     ).tag(sync=True, init_option=True)
     projection = Unicode(
         "SIN",
-        help=("The projection for the view. The keywords follow the FITS standard."),
+        help="The projection for the view. The keywords follow the FITS standard.",
     ).tag(sync=True, init_option=True)
     samp = Bool(False, help="Wether to allow sending data via the SAMP protocol.").tag(
         sync=True, init_option=True, only_init=True
@@ -211,6 +257,13 @@ class Aladin(anywidget.AnyWidget):
         help="The last view of the base layer. It is used "
         "to convert the view to an astropy.HDUList",
     ).tag(sync=True)
+
+    _ready = Bool(
+        False,
+        help="A private trait that stores if the widget is ready.",
+    ).tag(
+        sync=True,
+    )
 
     # Temporary traitlets for widget size problem
     _is_reduced = Bool(
@@ -393,6 +446,7 @@ class Aladin(anywidget.AnyWidget):
             }
         )
 
+    @is_ready
     def get_view_as_fits(self) -> HDUList:
         """Get the base layer of the widget as an astropy HDUList object.
 
@@ -426,6 +480,7 @@ class Aladin(anywidget.AnyWidget):
             ) from e
         return fits
 
+    @is_ready
     def add_catalog_from_URL(
         self, votable_URL: str, votable_options: Optional[dict] = None
     ) -> None:
@@ -447,6 +502,7 @@ class Aladin(anywidget.AnyWidget):
             }
         )
 
+    @is_ready
     def add_fits(self, fits: Union[str, Path, HDUList], **image_options: any) -> None:
         """Load a FITS file into the widget.
 
@@ -477,6 +533,7 @@ class Aladin(anywidget.AnyWidget):
 
     # MOCs
 
+    @is_ready
     def add_moc(self, moc: any, **moc_options: any) -> None:
         """Add a MOC to the Aladin-Lite widget.
 
@@ -527,6 +584,7 @@ class Aladin(anywidget.AnyWidget):
                     "library with 'pip install mocpy'."
                 ) from imp
 
+    @is_ready
     def add_moc_from_URL(
         self, moc_URL: str, moc_options: Optional[dict] = None
     ) -> None:
@@ -551,6 +609,7 @@ class Aladin(anywidget.AnyWidget):
             moc_options = {}
         self.add_moc(moc_URL, **moc_options)
 
+    @is_ready
     def add_moc_from_dict(
         self, moc_dict: dict, moc_options: Optional[dict] = None
     ) -> None:
@@ -576,6 +635,7 @@ class Aladin(anywidget.AnyWidget):
             moc_options = {}
         self.add_moc(moc_dict, **moc_options)
 
+    @is_ready
     def add_table(self, table: Union[QTable, Table], **table_options: any) -> None:
         """Load a table into the widget.
 
@@ -596,6 +656,7 @@ class Aladin(anywidget.AnyWidget):
             buffers=[table_bytes.getvalue()],
         )
 
+    @is_ready
     def add_graphic_overlay_from_region(
         self,
         region: SupportedRegion,
@@ -676,6 +737,7 @@ class Aladin(anywidget.AnyWidget):
             }
         )
 
+    @is_ready
     def add_overlay_from_stcs(
         self, stc_string: Union[List[str], str], **overlay_options: any
     ) -> None:
@@ -699,6 +761,7 @@ class Aladin(anywidget.AnyWidget):
         )
         self.add_graphic_overlay_from_stcs(stc_string, **overlay_options)
 
+    @is_ready
     def add_graphic_overlay_from_stcs(
         self, stc_string: Union[List[str], str], **overlay_options: any
     ) -> None:
@@ -745,6 +808,7 @@ class Aladin(anywidget.AnyWidget):
         """
         self.send({"event_name": "get_JPG_thumbnail"})
 
+    @is_ready
     def set_color_map(self, color_map_name: str) -> None:
         """Change the color map of the Aladin Lite widget.
 
@@ -756,6 +820,7 @@ class Aladin(anywidget.AnyWidget):
         """
         self.send({"event_name": "change_colormap", "colormap": color_map_name})
 
+    @is_ready
     def selection(self, selection_type: str = "rectangle") -> None:
         """Trigger the selection tool.
 
@@ -771,6 +836,7 @@ class Aladin(anywidget.AnyWidget):
             raise ValueError("selection_type must be 'circle' or 'rectangle'")
         self.send({"event_name": "trigger_selection", "selection_type": selection_type})
 
+    @is_ready
     def rectangular_selection(self) -> None:
         """Trigger the rectangular selection tool.
 
@@ -787,6 +853,7 @@ class Aladin(anywidget.AnyWidget):
 
     # Adding a listener
 
+    @is_ready
     def set_listener(self, listener_type: str, callback: Callable) -> None:
         """Set a listener for an event to the widget.
 
@@ -813,6 +880,7 @@ class Aladin(anywidget.AnyWidget):
                 "'object_clicked', 'click' or 'select'"
             )
 
+    @is_ready
     def add_listener(self, listener_type: str, callback: Callable) -> None:
         """Add a listener to the widget. Use set_listener instead.
 
