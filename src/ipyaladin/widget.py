@@ -19,6 +19,8 @@ from astropy.table.table import QTable
 from astropy.table import Table
 from astropy.io import fits as astropy_fits
 from astropy.io.fits import HDUList
+import astropy.units as u
+from astropy.units import Unit
 from astropy.wcs import WCS
 import numpy as np
 import traitlets
@@ -633,6 +635,23 @@ class Aladin(anywidget.AnyWidget):
             moc_options = {}
         self.add_moc(moc_dict, **moc_options)
 
+    def _convert_table_units(
+        self, table: Union[QTable, Table], error_dict: Dict, unit_to: Unit = u.deg
+    ) -> Union[QTable, Table]:
+        table = table.copy()
+        for _, error_spec in error_dict.values():
+            col_name = error_spec["col"]
+            unit_from = error_spec["unit"]
+            table[col_name].unit = unit_from
+            for row in table:
+                if row[col_name] != "--" and not np.isnan(row[col_name]):
+                    row[col_name] = (
+                        Angle(row[col_name], unit=unit_from).to(unit_to).value
+                    )
+            table[col_name].unit = unit_to
+
+        return table
+
     def add_table(self, table: Union[QTable, Table], **table_options: any) -> None:
         """Load a table into the widget.
 
@@ -646,6 +665,11 @@ class Aladin(anywidget.AnyWidget):
             <https://cds-astro.github.io/aladin-lite/global.html#CatalogOptions>`_
 
         """
+        if table_options.get("error_dict"):
+            table = self._convert_table_units(table, table_options["error_dict"])
+            # remove unit sub-key for all the keys
+            for key in table_options["error_dict"]:
+                table_options["error_dict"][key].pop("unit")
         table_bytes = io.BytesIO()
         table.write(table_bytes, format="votable")
         self.send(
