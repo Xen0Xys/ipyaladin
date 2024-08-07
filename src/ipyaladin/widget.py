@@ -5,6 +5,7 @@ This module provides a Python wrapper around the Aladin Lite JavaScript library.
 It allows to display astronomical images and catalogs in an interactive way.
 """
 
+import math
 from collections.abc import Callable
 import io
 import pathlib
@@ -20,7 +21,6 @@ from astropy.table import Table
 from astropy.io import fits as astropy_fits
 from astropy.io.fits import HDUList
 import astropy.units as u
-from astropy.units import Unit
 from astropy.wcs import WCS
 import numpy as np
 import traitlets
@@ -636,19 +636,68 @@ class Aladin(anywidget.AnyWidget):
         self.add_moc(moc_dict, **moc_options)
 
     def _convert_table_units(
-        self, table: Union[QTable, Table], error_dict: Dict, unit_to: Unit = u.deg
+        self, table: Union[QTable, Table], error_dict: Dict, unit_to: u.Unit = u.deg
     ) -> Union[QTable, Table]:
+        """Convert the units of a table according to the error_dict.
+
+        Parameters
+        ----------
+        table : astropy.table.table.QTable or astropy.table.table.Table
+            The table to convert.
+        error_dict : dict
+            The dictionary containing the error specifications.
+        unit_to : astropy.units.Unit
+            The unit to convert to. Default is degrees.
+
+        Returns
+        -------
+        astropy.table.table.QTable or astropy.table.table.Table
+            The table with the units converted.
+
+        """
         table = table.copy()
-        for _, error_spec in error_dict.values():
+        for error_spec in error_dict.values():
+            if not isinstance(error_spec, dict):
+                continue
             col_name = error_spec["col"]
             unit_from = error_spec["unit"]
             table[col_name].unit = unit_from
+            table[col_name] = table[col_name].astype(float)
             for row in table:
                 if row[col_name] != "--" and not np.isnan(row[col_name]):
                     row[col_name] = (
                         Angle(row[col_name], unit=unit_from).to(unit_to).value
                     )
             table[col_name].unit = unit_to
+
+        return table
+
+    def _update_ellipse_enclosed_probability(
+        self, table: Union[QTable, Table], error_dict: Dict
+    ) -> Union[QTable, Table]:
+        """Update the table according to the ellipse_enclosed_probability.
+
+        Parameters
+        ----------
+        table : astropy.table.table.QTable or astropy.table.table.Table
+            The table to update.
+        error_dict : dict
+            The dictionary containing the error specifications.
+
+        Returns
+        -------
+        astropy.table.table.QTable or astropy.table.table.Table
+            The updated table.
+
+        """
+        table = table.copy()
+        r = math.sqrt(-2 * math.log(1 - error_dict["ellipse_enclosed_probability"]))
+        impacted_keys = {"smin", "smaj", "r"}
+        for key in impacted_keys:
+            if not error_dict.get(key):
+                continue
+            # Multiply table column by r
+            table[error_dict[key]["col"]] = table[error_dict[key]["col"]] * r
 
         return table
 
@@ -667,8 +716,15 @@ class Aladin(anywidget.AnyWidget):
         """
         if table_options.get("error_dict"):
             table = self._convert_table_units(table, table_options["error_dict"])
-            # remove unit sub-key for all the keys
+            # if dict contains ellipse_enclosed_probability, update the table
+            if table_options["error_dict"].get("ellipse_enclosed_probability"):
+                table = self._update_ellipse_enclosed_probability(
+                    table, table_options["error_dict"]
+                )
+            # Remove unit sub-key for all the keys
             for key in table_options["error_dict"]:
+                if key == "ellipse_enclosed_probability":
+                    continue
                 table_options["error_dict"][key].pop("unit")
         table_bytes = io.BytesIO()
         table.write(table_bytes, format="votable")

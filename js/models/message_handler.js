@@ -152,6 +152,8 @@ export default class MessageHandler {
             s.data[errorDict["smin"]["col"]],
             s.data[errorDict["pa"]["col"]],
           );
+        if (errorDict["r"] && s.data[errorDict["r"]["col"]])
+          return A.circle(s.ra, s.dec, s.data[errorDict["r"]["col"]]);
       };
     A.catalogFromURL(
       url,
