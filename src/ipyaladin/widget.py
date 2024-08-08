@@ -9,6 +9,7 @@ import math
 from collections.abc import Callable
 import io
 import pathlib
+from copy import deepcopy
 from json import JSONDecodeError
 from pathlib import Path
 from typing import ClassVar, Dict, Final, List, Optional, Tuple, Union
@@ -715,6 +716,7 @@ class Aladin(anywidget.AnyWidget):
 
         """
         if table_options.get("error_dict"):
+            table_options["error_dict"] = deepcopy(table_options["error_dict"])
             table = self._convert_table_units(table, table_options["error_dict"])
             # if dict contains ellipse_enclosed_probability, update the table
             if table_options["error_dict"].get("ellipse_enclosed_probability"):
